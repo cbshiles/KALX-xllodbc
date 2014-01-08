@@ -1,139 +1,117 @@
-// header.h - header file for project
-// Uncomment the following line to use features for Excel2007 and above.
+// xllodbc.h
 //#define EXCEL12
-#pragma once
-#include <memory>
-#include "xll/xll.h"
+#include "../xll8/xll/xll.h"
 #include "odbc.h"
 
-#ifndef CATEGORY
-#define CATEGORY _T("ODBC")
-#endif
+typedef xll::traits<XLOPERX>::xchar xchar;
+typedef xll::traits<XLOPERX>::xcstr xcstr;
+typedef xll::traits<XLOPERX>::xword xword;
+typedef const SQLCHAR* sqlcstr; 
+typedef SQLCHAR* sqlstr; 
 
-typedef xll::traits<XLOPERX>::xcstr xcstr; // pointer to const string
-typedef xll::traits<XLOPERX>::xword xword; // use for OPER and FP indices
+// "parse\0null\0terminated\0sequence\0\0
+inline OPERX split0(xcstr s)
+{
+	OPERX o;
 
-namespace SQL {
-	// ab0cde00 -> ab;cde00
-	inline void null2char(LPSTR s, SQLCHAR c = ';')
-	{
-		for (LPSTR p = s; !(p[0] == 0 && p[1] == 0); ++p)
-			if (!*p)
-				*p = c;
+	for (xcstr b = s, e = _tcschr(s, 0); e[1]; b = e + 1, e = _tcschr(b, 0)) {
+		o.push_back(OPERX(b, e - b));
 	}
 
-	// 1x2 range of description and attributes
-	class Drivers : public net::enumerator<OPERX> {
-		static const SQLSMALLINT DESC_MAX = 1024, ATTR_MAX = 1024;
-		OPERX da_;
-		SQLSMALLINT ndesc_, nattr_;
-		SQLUSMALLINT dir_;
-		SQLRETURN Drivers_(SQLUSMALLINT direction)
-		{
-			SQLRETURN rc;
-			SQLSMALLINT ndesc, nattr;
+	return o;
+}
+// "split,strings;;on,sep" -> ["split","strings","","on","sep"]
+inline OPERX split(xcstr s, xword ns = 0, xcstr sep = _T(",;"))
+{
+	OPERX o;
 
-			rc = SQLDrivers(Env(), SQL_FETCH_FIRST,
-				(SQLCHAR*)(da_[0].val.str + 1), ndesc_, &ndesc, 
-				(SQLCHAR*)(da_[1].val.str + 1), nattr_, &nattr);
+	if (!ns)
+		ns = _tcslen(s);
 
-			da_[0].val.str[0] = static_cast<SQLCHAR>(ndesc);
-			da_[1].val.str[0] = static_cast<SQLCHAR>(nattr);
+	xcstr b = s, e;
+	do {
+		e = _tcspbrk(b, sep);
+		xchar n = e ? static_cast<xchar>(e - b) : ns;
+		o.push_back(OPERX(b, n));
+		ns -= n + 1;
+		b = e + 1;
+	} while (e);
 
-			null2char(da_[1].val.str + 1);
+	return o;
+}
 
-			LPSTR s;
-			s = da_[0].val.str+1;
-			s = da_[1].val.str+1;
+#define ODBC_STR(o) reinterpret_cast<SQLCHAR*>(o.val.str + 1), o.val.str[0]
+#define ODBC_BUF0(o) ODBC_STR(o), 0
+#define ODBC_BUFS(o) ODBC_STR(o), ODBC::lenptr<SQLSMALLINT>(o)
+#define ODBC_BUFI(o) ODBC_STR(o), ODBC::lenptr<SQLINTEGER>(o)
 
-			return rc;
-		}
+template<SQLSMALLINT T>
+inline void ODBC_ERROR(ODBC::Handle<T>& h)
+{
+	ODBC::DiagRec<T> dr(h);
+	for (SQLSMALLINT i = 1; dr.Get(i) != SQL_NO_DATA; ++i) {
+		std::basic_string<SQLCHAR> rec(dr.state);
+		rec.append((SQLCHAR*)_T(": "));
+		rec.append(dr.message);
+
+		XLL_INFO((char*)rec.c_str());
+	}
+}
+
+namespace ODBC {
+
+	template<class T>
+	class lenptr {
+		OPERX& o_;
+		T len;
 	public:
-		Drivers(SQLSMALLINT ndesc = DESC_MAX, SQLSMALLINT nattr = ATTR_MAX)
-			: da_(1,2), ndesc_(ndesc), nattr_(nattr), dir_(SQL_FETCH_FIRST)
-		{
-			da_[0] = OPERX(_T(""), static_cast<SQLCHAR>(ndesc));
-			da_[1] = OPERX(_T(""), static_cast<SQLCHAR>(nattr));
-		}
-		~Drivers()
+		lenptr(OPERX& o)
+			: o_(o), len(0)
 		{ }
-		void _reset()
+		~lenptr()
 		{
-			Drivers_(SQL_FETCH_FIRST);
+			if (len)
+				o_.val.str[0] = static_cast<xchar>(len);
 		}
-		bool _next()
+		operator T*()
 		{
-			SQLRETURN rc = Drivers_(dir_);
-			dir_ = SQL_FETCH_NEXT;
-
-			return SQL_NO_DATA != rc;
-			
-		}
-		const OPERX& _current() const
-		{
-			return da_;
-		}
-	};
-	class Driver : public net::enumerable<OPERX> {
-		Drivers d_;
-	public:
-		Drivers& _get()
-		{
-			return d_;
+			return &len;
 		}
 	};
 
-	class Results : public net::enumerator<OPERX> {
-		SQL::Stmt& stmt_;
-		OPERX row_; // struct { char buf; OPERX row; } pass &buf as last arg to SQLBindCol
-		void Bind(xword i, OPERX& o)
+	struct Row : public OPERX {
+		typedef xll::traits<XLOPERX>::xword xword;
+		Row(ODBC::Stmt& stmt)
 		{
-			SQLSMALLINT type;
+			SQLSMALLINT n;
+			ensure (SQL_SUCCEEDED(SQLNumResultCols(stmt, &n)));
+			resize(1, n);
 
-			ensure (SQL_SUCCEEDED(SQLColAttribute(stmt_, i + 1, SQL_DESC_TYPE, 0, 0, 0, &type)));
-
-			switch (type) {
-			// convert DATE and TIME to Excel Julian at database query level
-			case SQL_DOUBLE:
-				SQLBindCol(stmt_, i + 1, type, &o.val.num, 0, 0);
-				break;
-			case SQL_VARCHAR: case SQL_WVARCHAR:
-				o = OPERX(_T(""), 255);
-				SQLBindCol(stmt_, i + 1, type, o.val.str + 1, 255, (SQLINTEGER*)(o.val.str - 1));
-				break;
+			SQLSMALLINT type, nullable, digits;
+			SQLULEN len;
+			for (xword i = 0; i < n; ++i) {
+				OPERX& val = operator[](i);
+				OPERX name(_T(""), 255);
+				ensure (SQL_SUCCEEDED(SQLDescribeCol(stmt, i + 1, ODBC_BUFS(name), &type, &len, &digits, &nullable)));
+				switch (type) {
+				case SQL_CHAR: case SQL_VARCHAR: {
+					val = OPERX(_T(""), 255);
+					ensure (SQLBindCol(stmt, n + 1, SQL_C_CHAR, 
+						reinterpret_cast<SQLCHAR*>(val.val.str + 1), val.val.str[0], 0));
+					break;
+				}
+				case SQL_SMALLINT: case SQL_INTEGER: case SQL_REAL: case SQL_FLOAT:
+				case SQL_BIT: case SQL_TINYINT: case SQL_BIGINT:
+					val.xltype = xltypeNum;
+					ensure (SQLBindCol(stmt, n + 1, SQL_C_DOUBLE, &val.val.num, 0, 0));
+					break;
+				default:
+					throw std::runtime_error("ODBC::Row: unrecognized data type");
+				}
 			}
 		}
-		Results(const Results&);
-		Results& operator=(const Results&);
-	public:
-		Results(SQL::Stmt& stmt)
-			: stmt_(stmt)
-		{
-			SQLSMALLINT cols;
-
-			ensure (SQL_SUCCEEDED(SQLNumResultCols(stmt, &cols)));
-			row_.resize(1, static_cast<xword>(cols));
-
-			for (xword i = 0; i < row_.size(); ++i)
-				Bind(i, row_[i]);
-		}
-		~Results()
-		{
-			SQLCancel(stmt_);
-		}
-		void _reset()
-		{
-			SQLSetPos(stmt_, 0, SQL_REFRESH, SQL_LOCK_NO_CHANGE); // ???
-		}
-		bool _next()
-		{
-			SQLRETURN rc = SQLFetch(stmt_);
-			// fix up row?
-			return SQL_SUCCEEDED(rc);
-		}
-		const OPERX& _current()
-		{
-			return row_;
-		}
+		~Row()
+		{ }
 	};
+
 }
