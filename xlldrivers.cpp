@@ -3,6 +3,18 @@
 
 using namespace xll;
 
+// "parse\0null\0terminated\0sequence\0\0
+inline OPERX split0(xcstr s)
+{
+	OPERX o;
+
+	for (xcstr b = s, e = _tcschr(s, 0); e[1]; b = e + 1, e = _tcschr(b, 0)) {
+		o.push_back(OPERX(b, e - b));
+	}
+
+	return o;
+}
+
 static AddInX xai_odbc_drivers(
 	Function(XLL_LPOPERX, _T("?xll_odbc_drivers"), _T("ODBC.DRIVERS"))
 	.Uncalced()
@@ -21,14 +33,13 @@ LPOPERX WINAPI xll_odbc_drivers(void)
 		r[1] = OPERX(_T(""), 255);
 
 		while (SQL_NO_DATA != SQLDrivers(ODBC::Env(), SQL_FETCH_NEXT, ODBC_BUFS(r[0]), ODBC_BUFS(r[1]))) {
-			OPERX kv(split0(r[1].val.str + 1));
-			handle<OPERX> hkv(new OPERX());
-			for (xword i = 0; i < kv.size(); ++i) {
-				hkv->push_back(split(kv[i].val.str + 1, kv[i].val.str[0], _T("=")).resize(1,2));
+			xchar* r1(r[1].val.str);
+			for (xword i = 1; i <= r1[0]; ++i) {
+				if (!r1[i] && r1[i+1])
+					r1[i] = ';';
 			}
-
 			o.push_back(r[0]);
-			o.push_back(OPERX(hkv.get()));
+			o.push_back(r[1]);
 
 			r[0].val.str[0] = 255;
 			r[1].val.str[0] = 255;
