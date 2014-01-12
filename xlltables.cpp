@@ -74,7 +74,7 @@ static AddInX xai_odbc_tables(
 	.Category(_T("ODBC"))
 	.FunctionHelp(_T("Return table information"))
 );
-LPXLOPERX WINAPI xll_odbc_tables(HANDLEX h, SQLCHAR* cat, SQLCHAR* schem, SQLCHAR* name, SQLCHAR* type)
+LPXLOPERX WINAPI xll_odbc_tables(HANDLEX h, SQLTCHAR* cat, SQLTCHAR* schem, SQLTCHAR* name, SQLTCHAR* type)
 {
 #pragma XLLEXPORT
 	static OPERX o;

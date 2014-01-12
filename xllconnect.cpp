@@ -13,7 +13,7 @@ static AddInX xai_odbc_connect(
 	.Category(_T("ODBC"))
 	.FunctionHelp(_T("Return a handle to an ODBC connection."))
 );
-HANDLEX WINAPI xll_odbc_connect(SQLCHAR* dsn, SQLCHAR* user, SQLCHAR* pass)
+HANDLEX WINAPI xll_odbc_connect(SQLTCHAR* dsn, SQLTCHAR* user, SQLTCHAR* pass)
 {
 #pragma XLLEXPORT
 	handlex h;
@@ -66,7 +66,7 @@ HANDLEX WINAPI xll_odbc_browse_connect(sqlcstr conn)
 */
 static AddInX xai_odbc_driver_connect(
 	FunctionX(XLL_HANDLEX, _T("?xll_odbc_driver_connect"), _T("ODBC.CONNECT.DRIVER"))
-	.Range(_T("{DSN=\"DEFAULT\"}"), _T("is an odbc connection string."))
+	.Range(_T("{DRIVER=\"{SQL Server}\"}"), _T("is an odbc connection string."))
 	.Uncalced()
 	.Category(_T("ODBC"))
 	.FunctionHelp(_T("Display a list of available drivers and return a handle to an ODBC connection."))
@@ -93,7 +93,7 @@ HANDLEX WINAPI xll_odbc_driver_connect(LPOPERX pcs)
 			conn.append(cs[i].val.str + 1, cs[i].val.str[0]);
 		}
 
-		ensure (SQL_SUCCEEDED(hdbc->DriverConnect((const SQLCHAR*)conn.c_str())) || ODBC_ERROR(*hdbc));
+		ensure (SQL_SUCCEEDED(hdbc->DriverConnect((const SQLTCHAR*)conn.c_str())) || ODBC_ERROR(*hdbc));
 
 		h = hdbc.get();
 	}
@@ -110,10 +110,10 @@ static AddInX xai_odbc_connection_string(
 	.Category(_T("ODBC"))
 	.FunctionHelp(_T("Returns the full connection string."))
 );
-const SQLCHAR* WINAPI xll_odbc_connection_string(HANDLEX dbc)
+const SQLTCHAR* WINAPI xll_odbc_connection_string(HANDLEX dbc)
 {
 #pragma XLLEXPORT
-	const SQLCHAR* conn(0);
+	const SQLTCHAR* conn(0);
 
 	try {
 		handle<ODBC::Dbc> hdbc(dbc);

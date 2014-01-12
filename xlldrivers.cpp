@@ -16,7 +16,7 @@ inline OPERX split0(xcstr s)
 }
 
 static AddInX xai_odbc_drivers(
-	Function(XLL_LPOPERX, _T("?xll_odbc_drivers"), _T("ODBC.DRIVERS"))
+	FunctionX(XLL_LPOPERX, _T("?xll_odbc_drivers"), _T("ODBC.DRIVERS"))
 	.Uncalced()
 	.Category(_T("ODBC"))
 	.FunctionHelp(_T("Retrieve a range of ODBC drivers."))
@@ -34,18 +34,16 @@ LPOPERX WINAPI xll_odbc_drivers(void)
 
 		while (SQL_NO_DATA != SQLDrivers(ODBC::Env(), SQL_FETCH_NEXT, ODBC_BUFS(r[0]), ODBC_BUFS(r[1]))) {
 			xchar* r1(r[1].val.str);
+			// "char\0char\0\0" -> "char;char;\0"
 			for (xword i = 1; i <= r1[0]; ++i) {
 				if (!r1[i] && r1[i+1])
 					r1[i] = ';';
 			}
-			o.push_back(r[0]);
-			o.push_back(r[1]);
+			o.push_back(r);
 
 			r[0].val.str[0] = 255;
 			r[1].val.str[0] = 255;
 		}
-
-		o.resize(o.size()/2, 2);
 	}
 	catch (const std::exception& ex) {
 		XLL_ERROR(ex.what());

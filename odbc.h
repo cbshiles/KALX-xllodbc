@@ -3,98 +3,8 @@
 #include <Windows.h>
 #include <sqlext.h>
 
-// Adapt OPER's to ODBC buffers.
-//#define ODBC_BUF(o) reinterpret_cast<SQLCHAR*>(o.val.str + 1), o.val.str[0], ODBC::buf<SQLSMALLINT>(o).ptr()
-//#define ODBC_BUF2(o) reinterpret_cast<SQLCHAR*>(o.val.str + 1), o.val.str[0], ODBC::buf<SQLLEN>(o).ptr()
-
-//#define ODBC_STR(o) reinterpret_cast<SQLCHAR*>(o.val.str + 1), o.val.str[0], ODBC::buf<SQLSMALLINT>(o).ptr()
-//#define ODBC_NUM(o) reinterpret_cast<SQLPOINTER>(o.val.num), 0, 0
-
-//#define ODBC_BUF(o) ODBC::ptr(o), ODBC::len(o), ODBC::lenptr(o)
-
 namespace ODBC {
-/*
-	template<class T>
-	struct ptrlen_traits {
-		typedef typename T type;
-	};
 
-	template<class T>
-	inline SQLPOINTER ptr(T& t) { reutrn &t; }
-	template<class T>
-	inline T len(T&) { return sizeof(T); }
-	template<class T>
-	class ptrlen {
-		ptrlen_traits<T>::type len;
-	public:
-		ptrlen(T&) { }
-		~ptrlen() { }
-		operator T*() { return 0; }
-	};
-	template<>
-	class ptrlen<SQLCHAR*> {
-		SQLCHAR* t_;
-	public:
-		ptrlen(SQLCHAR* t)
-			: t_(t)
-		{ }
-		~ptrlen()
-		{
-			t_[0] = static_cast<SQLCHAR>(len_);
-		}
-		
-	}
-
-	// 
-	template<class T, class L>
-	class Buf {
-		T& type_;
-		L len_;
-	public:
-		Buf(T& type)
-			: type_(type), len_(0)
-		{ }
-		~Buf()
-		{ }
-		T* ptr()
-		{
-			return &type;
-		}
-		L len()
-		{
-			return sizeof(T);
-		}
-		L* lenptr()
-		{
-			return 0;
-		}
-	};
-	// int classes
-	template<class T>
-	class Buf<T,T> { };
-	
-	// preallocated counted strings
-	template<class L>
-	class Buf<SQLCHAR*,L> {
-		~Buf()
-		{
-			if (len_ < type[0])
-				type[0] = static_cast<SQLCHAR>(len_);
-		}
-		operator SQLCHAR*()
-		{
-			return type + 1;
-		}
-		L len()
-		{
-			return type[0];
-		}
-		L* lenptr()
-		{
-			return &len_;
-		}
-	};
-*/
 	template<SQLSMALLINT T>
 	struct Handle {
 		static const SQLSMALLINT type = T;
@@ -125,7 +35,7 @@ namespace ODBC {
 	class DiagRec {
 		const Handle<T>& h_;
 	public:
-		SQLCHAR state[6], message[SQL_MAX_MESSAGE_LENGTH]; 
+		SQLTCHAR state[6], message[SQL_MAX_MESSAGE_LENGTH]; 
 		SQLINTEGER error;
 		SQLRETURN rc;
 		DiagRec(const Handle<T>& h)
@@ -157,10 +67,10 @@ namespace ODBC {
 		}
 	};
 	template<class L>
-	struct LenPtr<L,SQLCHAR*> {
+	struct LenPtr<L,SQLTCHAR*> {
 		~LenPtr()
 		{
-			type[0] = static_cast<SQLCHAR>(len);
+			type[0] = static_cast<SQLTCHAR>(len);
 		}
 	};
 */
@@ -192,9 +102,9 @@ namespace ODBC {
 
 			return r;
 		}
-		std::basic_string<SQLCHAR> Get(SQLSMALLINT n, SQLSMALLINT id)
+		std::basic_string<SQLTCHAR> Get(SQLSMALLINT n, SQLSMALLINT id)
 		{
-			std::basic_string<SQLCHAR> r(255);
+			std::basic_string<SQLTCHAR> r(255);
 
 			SQLSMALLINT len;
 			ensure (SQL_SUCCEEDED(SQLGetDiagField(Handle<T>::type, h_, n, id, &r[0], r.size(), &len)));
@@ -203,12 +113,12 @@ namespace ODBC {
 
 			return r;
 		}
-		void Get(SQLSMALLINT n, SQLSMALLINT id, SQLCHAR* str)
+		void Get(SQLSMALLINT n, SQLSMALLINT id, SQLTCHAR* str)
 		{
 			SQLSMALLINT len;
 			ensure (SQL_SUCCEEDED(SQLGetDiagField(Handle<T>::type, h_, n, id, str + 1, str[0], &len)));
 			if (len < r.size())
-				str[0] = static_cast<SQLCHAR>(len);
+				str[0] = static_cast<SQLTCHAR>(len);
 		}
 	};
 
@@ -234,7 +144,7 @@ namespace ODBC {
 	};
 
 	class Dbc : public Handle<SQL_HANDLE_DBC> {
-		SQLCHAR connect_[1024];
+		SQLTCHAR connect_[1024];
 		Dbc(const Dbc&);
 		Dbc& operator=(const Dbc&);
 	public:
@@ -242,16 +152,16 @@ namespace ODBC {
 			: Handle<SQL_HANDLE_DBC>(Env())
 		{ }
 #ifdef _WINDOWS
-		SQLRETURN DriverConnect(const SQLCHAR* connect, SQLUSMALLINT complete = SQL_DRIVER_COMPLETE)
+		SQLRETURN DriverConnect(const SQLTCHAR* connect, SQLUSMALLINT complete = SQL_DRIVER_COMPLETE)
 		{
-			return rc = SQLDriverConnect(*this, GetDesktopWindow(), const_cast<SQLCHAR*>(connect), SQL_NTS, connect_, 1024, 0, complete);
+			return rc = SQLDriverConnect(*this, GetDesktopWindow(), const_cast<SQLTCHAR*>(connect), SQL_NTS, connect_, 1024, 0, complete);
 		}
 #endif
-		SQLRETURN BrowseConnect(const SQLCHAR* connect)
+		SQLRETURN BrowseConnect(const SQLTCHAR* connect)
 		{
-			return rc = SQLBrowseConnect(*this, const_cast<SQLCHAR*>(connect), SQL_NTS, connect_, 1024, 0);
+			return rc = SQLBrowseConnect(*this, const_cast<SQLTCHAR*>(connect), SQL_NTS, connect_, 1024, 0);
 		}
-		const SQLCHAR* connectionString() const
+		const SQLTCHAR* connectionString() const
 		{
 			return connect_;
 		}

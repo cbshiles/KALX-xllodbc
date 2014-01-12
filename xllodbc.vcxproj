@@ -84,6 +84,7 @@
   <ItemGroup>
     <ClInclude Include="odbc.h" />
     <ClInclude Include="xllodbc.h" />
+    <ClInclude Include="xllrange.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="xllconnect.cpp" />
@@ -91,6 +92,7 @@
     <ClCompile Include="xlldrivers.cpp" />
     <ClCompile Include="xllodbc.cpp" />
     <ClCompile Include="xllrange.cpp" />
+    <ClCompile Include="xlltables.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\xll8\xll.vcxproj">

@@ -4,7 +4,7 @@
 using namespace xll;
 
 static AddInX xai_odbc_data_sources(
-	Function(XLL_LPOPERX, _T("?xll_odbc_data_sources"), _T("ODBC.DATA.SOURCES"))
+	FunctionX(XLL_LPOPERX, _T("?xll_odbc_data_sources"), _T("ODBC.DATA.SOURCES"))
 	.Category(_T("ODBC"))
 	.FunctionHelp(_T("Retrieve a range of data sources and descriptions."))
 );
