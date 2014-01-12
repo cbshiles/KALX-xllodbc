@@ -58,8 +58,7 @@ LPOPERX WINAPI xll_odbc_execute(HANDLEX dbc, LPOPERX pq)
 //		double x;
 //		SQLBindCol(stmt, 2, SQL_C_DOUBLE, &x, sizeof(double), 0);
 		while (SQL_SUCCEEDED(SQLFetch(stmt)) || ODBC_ERROR(stmt)) {
-			for (xword i = 0; i < row.size(); ++i)
-				ensure (SQL_SUCCEEDED(ODBC::GetData(stmt, i, row[i])) || ODBC_ERROR(stmt));
+			row.getData();
 			o.push_back(row);
 		}
 	}

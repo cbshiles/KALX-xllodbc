@@ -24,7 +24,6 @@ LPOPERX WINAPI xll_odbc_data_sources(void)
 			r[0].val.str[0] = 255;
 			r[1].val.str[0] = 255;
 		}
-
 	}
 	catch (const std::exception& ex) {
 		XLL_ERROR(ex.what());
@@ -34,4 +33,3 @@ LPOPERX WINAPI xll_odbc_data_sources(void)
 
 	return &o;
 }
-

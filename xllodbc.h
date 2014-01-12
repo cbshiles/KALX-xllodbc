@@ -1,5 +1,5 @@
 // xllodbc.h
-#define EXCEL12
+//#define EXCEL12
 #include "../xll8/xll/xll.h"
 #include "odbc.h"
 
@@ -61,64 +61,99 @@ namespace ODBC {
 
 		return n;
 	}
-	inline SQLRETURN GetData(ODBC::Stmt& stmt, SQLUSMALLINT n, OPERX& o)
+	inline SQLRETURN GetNum(ODBC::Stmt& stmt, SQLUSMALLINT n, OPERX& o)
+	{
+		o.xltype = xltypeNum;
+
+		return  SQLGetData(stmt, n + 1, SQL_C_DOUBLE, &o.val.num, sizeof(double), 0);
+	}
+	inline SQLRETURN GetStr(ODBC::Stmt& stmt, SQLUSMALLINT n, OPERX& o, SQLULEN len = 0)
+	{
+		if (len != 0)
+			o = OPERX(_T(""), static_cast<xchar>(len));
+
+		return SQLGetData(stmt, n + 1, SQL_C_TCHAR, ODBC_BUF0(o));
+	}
+	inline SQLRETURN GetDate(ODBC::Stmt& stmt, SQLUSMALLINT n, OPERX& o, SQLULEN len = 0)
 	{
 		SQLRETURN rc(SQL_ERROR);
+		SQL_TIMESTAMP_STRUCT ts;
 
-		switch (o.xltype) {
-		case xltypeNum:
-			rc = SQLGetData(stmt, n + 1, SQL_C_DOUBLE, &o.val.num, sizeof(double), 0);
-			break;
-		case xltypeStr:
-			rc = SQLGetData(stmt, n + 1, SQL_C_TCHAR, ODBC_BUF0(o));
-//		default:
-//			throw std::runtime_error("ODBC::GetData: unknown type");
+		rc = SQLGetData(stmt, n + 1, SQL_C_TYPE_TIMESTAMP, &ts, sizeof(ts), 0);
+		if (SQL_SUCCEEDED(rc)) {
+			o = 0;
+			if (ts.year)
+				o += XLL_XLF(Date, OPERX(ts.year), OPERX(ts.month), OPERX(ts.day));
+			if (ts.hour || ts.minute || ts.second)
+				o += XLL_XLF(Time, OPERX(ts.hour), OPERX(ts.minute), OPERX(ts.second));
 		}
 
 		return rc;
 	}
 
-
 	struct Bind : public OPERX {
+		typedef xll::traits<XLOPERX>::xchar xchar;
 		typedef xll::traits<XLOPERX>::xword xword;
+		OPERX header;
+		std::vector<SQLSMALLINT> type, nullable, digits;
+		std::vector<SQLULEN> len;
+		std::vector<std::function<SQLRETURN(SQLSMALLINT)>> GetData;
+		ODBC::Stmt& stmt_;
 		Bind(ODBC::Stmt& stmt)
+			: OPERX(1, NumResultsCols(stmt)), header(1,size()), stmt_(stmt), GetData(size()), 
+				type(size()), nullable(size()), digits(size()), len(size())
 		{
-			SQLSMALLINT n;
-			ensure (SQL_SUCCEEDED(SQLNumResultCols(stmt, &n)));
-			resize(1, n);
+			for (xword i = 0; i < size(); ++i) {
+				header[i] = OPERX(_T(""), 255);
 
-			for (xword i = 0; i < n; ++i) {
-				OPERX& ri = operator[](i);
-				OPERX name(_T(""), 255);
-				SQLSMALLINT type(0), nullable(0), digits(0);
-				SQLULEN len(0);
-//				SQLColAttribute(stmt, n + 1, SQL_DESC_TYPE, ODBC_BUFS(name), &type);
-				ensure (SQL_SUCCEEDED(SQLDescribeCol(stmt, i + 1, ODBC_BUFS(name), &type, &len, &digits, &nullable)) || ODBC_ERROR(stmt));
-				switch (type) {
-				case SQL_CHAR: case SQL_VARCHAR: case SQL_WCHAR: case SQL_WVARCHAR:
-					ri = OPERX(_T(""), 255);
-//					ensure (SQL_SUCCEEDED(SQLBindCol(stmt, n + 1, SQL_C_CHAR, ODBC_BUF0(ri))) || ODBC_ERROR(stmt));
-					
+				ensure (SQL_SUCCEEDED(SQLDescribeCol(stmt, i + 1, ODBC_BUFS(header[i]), &type[i], &len[i], &digits[i], &nullable[i]))
+					|| ODBC_ERROR(stmt));
+
+				switch (type[i]) {
+				case SQL_CHAR: case SQL_VARCHAR: case SQL_WCHAR: case SQL_WVARCHAR: 
+					//!!! check for long strings!!!
+					operator[](i) = OPERX(_T(""), static_cast<xchar>(len[i]));
+					GetData[i] = [this](SQLSMALLINT i) { return this->GetStr(i); };
+
 					break;
+
 				case SQL_SMALLINT: case SQL_INTEGER: case SQL_DOUBLE: case SQL_REAL:
 				case SQL_BIT: case SQL_TINYINT: case SQL_BIGINT: case SQL_FLOAT:
-					ri.xltype = xltypeNum;
-//					ensure (SQL_SUCCEEDED(SQLBindCol(stmt, n + 1, SQL_C_DOUBLE, &ri.val.num, sizeof(double), 0)) || ODBC_ERROR(stmt));
+					GetData[i] = [this](SQLSMALLINT i) { return this->GetNum(i); };
 					
-					break;
+					break; 
+
 				case SQL_DATE: case SQL_TIME: case SQL_TIMESTAMP:
 				case SQL_TYPE_DATE: case SQL_TYPE_TIME: case SQL_TYPE_TIMESTAMP:
-					ri = OPERX(_T(""), 255);
-//					ensure (SQL_SUCCEEDED(SQLBindCol(stmt, n + 1, SQL_C_CHAR, ODBC_BUF0(ri))) || ODBC_ERROR(stmt));
+					GetData[i] = [this](SQLSMALLINT i) { return this->GetDate(i); };
 					
 					break;
-//				default:
+
+					//				default:
 //					throw std::runtime_error("ODBC::Bind: unrecognized data type");
 				}
 			}
 		}
 		~Bind()
 		{ }
+
+		SQLRETURN GetNum(SQLUSMALLINT i)
+		{
+			return ODBC::GetNum(stmt_, i, operator[](i));
+		}
+		SQLRETURN GetStr(SQLUSMALLINT i)
+		{
+			return ODBC::GetStr(stmt_, i, operator[](i));
+		}
+		SQLRETURN GetDate(SQLUSMALLINT i)
+		{
+			return ODBC::GetDate(stmt_, i, operator[](i));
+		}
+		void getData()
+		{
+			for (xword i = 0; i < size(); ++i)
+				ensure (SQL_SUCCEEDED(GetData[i](i)) || ODBC_ERROR(stmt_));
+		}
 	};
 
 }
